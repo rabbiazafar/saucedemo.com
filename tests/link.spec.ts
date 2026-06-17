@@ -1,64 +1,64 @@
-// Playwright tests for LinkedIn
 import { test, expect } from '@playwright/test';
 
-const EMAIL = process.env.LINKEDIN_EMAIL || 'rabbiazafar12@hotmail.com';
-const PASSWORD = process.env.LINKEDIN_PASSWORD || '106397Rabbia';
+test('Search and review SQA jobs on LinkedIn', async ({ page }) => {
 
-async function login(page) {
+  // Step 1: Open LinkedIn homepage
   await page.goto('https://www.linkedin.com/');
-  const signInButton = page.getByRole('link', { name: /Sign in/i }).first();
-  if (await signInButton.count() > 0 && await signInButton.isVisible()) {
-    await signInButton.click();
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+
+  // Step 2: Click Sign In
+  await page.getByRole('link', { name: 'Sign in' }).click();
+  await expect(page.locator('#username')).toBeVisible();
+
+  // Step 3 & 4: Enter credentials and login
+  await page.locator('#username').fill('rabbiazafar12@hotmail.com');
+  await page.locator('#password').fill('106397Rabbia');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/linkedin\.com\/feed|linkedin\.com\/jobs/);
+
+  // Step 5: Go to Jobs page
+  await page.getByRole('link', { name: 'Jobs' }).click();
+  await expect(page).toHaveURL(/linkedin\.com\/jobs/);
+
+  // Step 6: Search for SQA jobs
+  await page.getByRole('combobox', { name: /Search by title/ }).fill('Software Quality Assurance');
+  await page.keyboard.press('Enter');
+
+  // Step 7: Apply filters if available
+  const filterButton = page.getByRole('button', { name: 'Experience level' });
+  if (await filterButton.isVisible()) {
+    await filterButton.click();
   }
 
-  const emailInput = page.getByLabel(/Email|Email or phone|Email address/i).first();
-  await expect(emailInput).toBeVisible({ timeout: 20000 });
-  await emailInput.fill(EMAIL);
+  // Step 8: Verify SQA-related job titles appear in results
+  const jobCards = page.locator('.job-card-container');
+  await jobCards.first().waitFor({ state: 'visible' });
+  await expect(jobCards.first()).toBeVisible();
 
-  const passwordInput = page.getByLabel(/Password/i).first();
-  await expect(passwordInput).toBeVisible({ timeout: 20000 });
-  await passwordInput.fill(PASSWORD);
+  // Step 9: Open the first job posting
+  await jobCards.first().click();
 
-  const submitButton = page.getByRole('button', { name: /Sign in/i }).first();
-  await submitButton.click();
+  // Step 10: Verify job description contains QA keywords
+  const description = page.locator('.jobs-description');
+  await description.waitFor({ state: 'visible' });
+  const descText = (await description.textContent()) ?? '';
+  const qaKeywords = ['quality', 'testing', 'QA', 'automation', 'defect'];
+  const hasKeyword = qaKeywords.some(k => descText.toLowerCase().includes(k.toLowerCase()));
+  expect(hasKeyword).toBeTruthy();
 
-  const searchInput = page.locator('input[placeholder*="Search"], input.search-global-typeahead__input').first();
-  await expect(searchInput).toBeVisible({ timeout: 30000 });
-}
-
-async function ensureLoggedIn(page) {
-  const searchInput = page.locator('input[placeholder*="Search"], input.search-global-typeahead__input').first();
-  if (await searchInput.count() > 0) {
-    await expect(searchInput).toBeVisible({ timeout: 5000 }).catch(async () => {
-      await login(page);
-    });
-  } else {
-    await login(page);
+  // Step 11: Click Easy Apply if available
+  const easyApplyButton = page.getByRole('button', { name: 'Easy Apply' });
+  if (await easyApplyButton.isVisible()) {
+    await easyApplyButton.click();
+    await expect(page.locator('.jobs-easy-apply-modal')).toBeVisible();
+    await page.keyboard.press('Escape');
   }
-}
 
-test.describe('LinkedIn scenarios', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('https://www.linkedin.com/');
-  });
+  // Step 12: Save the job if save button is available
+  const saveButton = page.getByRole('button', { name: /Save/ });
+  if (await saveButton.isVisible()) {
+    await saveButton.click();
+    await expect(page.getByText(/Saved|Job saved/i)).toBeVisible();
+  }
 
-  test('Login with valid credentials', async ({ page }) => {
-    await login(page);
-    await expect(page).toHaveURL(/.*feed.*/i);
-  });
-
-  test('Search shows input after login', async ({ page }) => {
-    await ensureLoggedIn(page);
-    const searchInput = page.getByPlaceholder(/Search/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 20000 });
-    await searchInput.fill('Playwright automation');
-    await searchInput.press('Enter');
-    await expect(page.locator('div.search-results__container, .search-results')).toBeVisible({ timeout: 20000 });
-  });
-
-  test('Logout by visiting mobile logout endpoint', async ({ page }) => {
-    await ensureLoggedIn(page);
-    await page.goto('https://www.linkedin.com/m/logout/');
-    await expect(page).toHaveURL(/.*login.*/i);
-  });
 });
